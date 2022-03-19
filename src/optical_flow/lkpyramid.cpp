@@ -53,23 +53,31 @@ using std::endl;
 typedef float acctype;
 typedef float itemtype;
 
+/**
+ * @brief 对图像进行求导 (基本的相减求导操作)
+ * 
+ * @param src 原图
+ * @param dst 求导后的目标图像
+ */
 inline void calc_sharr_deriv(const cv::Mat &src, cv::Mat &dst)
 {
     // printf_line;
     int rows = src.rows, cols = src.cols, cn = src.channels(), colsn = cols * cn, depth = src.depth();
     CV_Assert(depth == CV_8U);
+
     if (dst.rows != rows || dst.cols != cols)
     {
         dst.create(rows, cols, CV_MAKETYPE(DataType<deriv_type>::depth, colsn * 2));
     }
+
     int x, y, delta = (int)alignSize((cols + 2) * cn, 16);
     AutoBuffer<deriv_type> _tempBuf(delta * 2 + 64);
     deriv_type *trow0 = alignPtr(_tempBuf + cn, 16), *trow1 = alignPtr(trow0 + delta, 16);
 
-// #if CV_SIMD128
+    // #if CV_SIMD128
     v_int16x8 c3 = v_setall_s16(3), c10 = v_setall_s16(10);
     bool haveSIMD = checkHardwareSupport(CV_CPU_SSE2) || checkHardwareSupport(CV_CPU_NEON);
-// #endif
+    // #endif
 
     for (y = 0; y < rows; y++)
     {
@@ -82,7 +90,7 @@ inline void calc_sharr_deriv(const cv::Mat &src, cv::Mat &dst)
 
         // do vertical convolution
         x = 0;
-// #if CV_SIMD128
+        // #if CV_SIMD128
         if (haveSIMD)
         {
             for (; x <= colsn - 8; x += 8)
@@ -98,7 +106,7 @@ inline void calc_sharr_deriv(const cv::Mat &src, cv::Mat &dst)
                 v_store(trow1 + x, t1);
             }
         }
-// #endif
+        // #endif
 
         for (; x < colsn; x++)
         {
@@ -120,7 +128,7 @@ inline void calc_sharr_deriv(const cv::Mat &src, cv::Mat &dst)
 
         // do horizontal convolution, interleave the results and store them to dst
         x = 0;
-// #if CV_SIMD128
+        // #if CV_SIMD128
         if (haveSIMD)
         {
             for (; x <= colsn - 8; x += 8)
@@ -137,7 +145,7 @@ inline void calc_sharr_deriv(const cv::Mat &src, cv::Mat &dst)
                 v_store_interleave((drow + x * 2), t0, t1);
             }
         }
-// #endif
+        // #endif
         for (; x < colsn; x++)
         {
             deriv_type t0 = (deriv_type)(trow0[x + cn] - trow0[x - cn]);
@@ -170,29 +178,59 @@ opencv_LKTrackerInvoker::opencv_LKTrackerInvoker(
     minEigThreshold = _minEigThreshold;
 }
 
+/**
+ * @brief 具体光流跟踪函数 : 对不同金字塔层的图像进行光流跟踪
+ * 
+ * @param range 上一帧中待跟踪点的范围(for循环的大小)
+ * @param prevImg 上一图像帧金字塔层中的图像
+ * @param prevDeriv 上一图像帧金字塔层中的梯度图像
+ * @param nextImg 当前图像帧金字塔中的图像
+ * @param prevPts 上一帧追踪点数据
+ * @param nextPts 当前帧追踪点数据
+ * @param status 追踪状态
+ * @param err 不用管,传入为0
+ * @param winSize 填充图像时的size
+ * @param criteria 结束标准
+ * @param level 当前处于金字塔哪一层
+ * @param maxLevel 最大层
+ * @param flags 
+ * @param minEigThreshold 阈值 
+ */
 inline void calculate_LK_optical_flow(const cv::Range &range, const Mat *prevImg, const Mat *prevDeriv, const Mat *nextImg,
                                       const Point2f *prevPts, Point2f *nextPts,
                                       uchar *status, float *err,
                                       Size winSize, TermCriteria criteria,
                                       int level, int maxLevel, int flags, float minEigThreshold)
 {
-    Point2f halfWin((winSize.width - 1) * 0.5f, (winSize.height - 1) * 0.5f);
-    const Mat &I = *prevImg;
-    const Mat &J = *nextImg;
-    const Mat &derivI = *prevDeriv;
+
+    /**
+     * @brief (1) 设置相关变量
+     * 
+     */
+    Point2f halfWin((winSize.width - 1) * 0.5f, (winSize.height - 1) * 0.5f);   // 窗口的一半 : 定义光流跟踪中计算光度误差patch的size
+    const Mat &I = *prevImg;    // 上一帧图像
+    const Mat &J = *nextImg;    // 当前帧图像
+    const Mat &derivI = *prevDeriv; // 上一帧图像的导数
 
     int j, cn = I.channels(), cn2 = cn * 2;
+
     cv::AutoBuffer<deriv_type> _buf(winSize.area() * (cn + cn2));
+
     int derivDepth = DataType<deriv_type>::depth;
 
     Mat IWinBuf(winSize, CV_MAKETYPE(derivDepth, cn), (deriv_type *)_buf);
     Mat derivIWinBuf(winSize, CV_MAKETYPE(derivDepth, cn2), (deriv_type *)_buf + winSize.area() * cn);
 
+    /**
+     * @brief Step 2 对每个特征点进行跟踪
+     * 
+     */
     for (int ptidx = range.start; ptidx < range.end; ptidx++)
     {
-        Point2f prevPt = prevPts[ptidx] * (float)(1. / (1 << level));
-        Point2f nextPt;
-        if (level == maxLevel)
+
+        Point2f prevPt = prevPts[ptidx] * (float)(1. / (1 << level)); // 获取上一帧中的待跟踪点数据
+        Point2f nextPt;// 用于保存当前帧中的跟踪结果点
+        if (level == maxLevel) // 如果是在最大层中
         {
             if (flags & OPTFLOW_USE_INITIAL_FLOW)
                 nextPt = nextPts[ptidx] * (float)(1. / (1 << level));
@@ -208,6 +246,10 @@ inline void calculate_LK_optical_flow(const cv::Range &range, const Mat *prevImg
         iprevPt.x = cvFloor(prevPt.x);
         iprevPt.y = cvFloor(prevPt.y);
 
+        /**
+         * @brief Step 3 初始化第0层的状态数组和残差数组
+         * 
+         */
         if (iprevPt.x < -winSize.width || iprevPt.x >= derivI.cols ||
             iprevPt.y < -winSize.height || iprevPt.y >= derivI.rows)
         {
@@ -236,16 +278,17 @@ inline void calculate_LK_optical_flow(const cv::Range &range, const Mat *prevImg
         acctype iA11 = 0, iA12 = 0, iA22 = 0;
         float A11, A12, A22;
 
-// #if CV_SSE2
+        // #if CV_SSE2
         __m128i qw0 = _mm_set1_epi32(iw00 + (iw01 << 16));
         __m128i qw1 = _mm_set1_epi32(iw10 + (iw11 << 16));
         __m128i z = _mm_setzero_si128();
         __m128i qdelta_d = _mm_set1_epi32(1 << (W_BITS1 - 1));
         __m128i qdelta = _mm_set1_epi32(1 << (W_BITS1 - 5 - 1));
         __m128 qA11 = _mm_setzero_ps(), qA12 = _mm_setzero_ps(), qA22 = _mm_setzero_ps();
-// #endif
+        // #endif
 
         // extract the patch from the first image, compute covariation matrix of derivatives
+        // 提取出图像块，用于计算矩阵导数的协方差
         int x, y;
         for (y = 0; y < winSize.height; y++)
         {
@@ -297,6 +340,12 @@ inline void calculate_LK_optical_flow(const cv::Range &range, const Mat *prevImg
                 qA11 = _mm_add_ps(qA11, _mm_mul_ps(fx, fx));
             }
             // #endif
+
+            
+            /**
+             * @brief 在patch范围内计算光度误差
+             * 
+             */
             for (; x < winSize.width * cn; x++, dsrc += 2, dIptr += 2)
             {
                 int ival = CV_DESCALE(src[x] * iw00 + src[x + cn] * iw01 +
@@ -437,7 +486,7 @@ inline void calculate_LK_optical_flow(const cv::Range &range, const Mat *prevImg
 
             Point2f delta((float)((A12 * b2 - A22 * b1) * D),
                           (float)((A12 * b1 - A11 * b2) * D));
-            //delta = -delta;
+            // delta = -delta;
 
             nextPt += delta;
             nextPts[ptidx] = nextPt + halfWin;
@@ -513,25 +562,37 @@ bool opencv_LKTrackerInvoker::calculate(cv::Range range) const
     return true;
 }
 
+// 构建光流金字塔
 inline int opencv_buildOpticalFlowPyramid(InputArray _img, OutputArrayOfArrays pyramid, Size winSize, int maxLevel, bool withDerivatives,
                                           int pyrBorder, int derivBorder, bool tryReuseInputImage)
 {
+
+    // 获取图像
     Mat img = _img.getMat();
     CV_Assert(img.depth() == CV_8U && winSize.width > 2 && winSize.height > 2);
+
+    // false取 pyrstep 为1
     int pyrstep = withDerivatives ? 2 : 1;
-#if (CV_MAJOR_VERSION==4)
+
+    // 创建容器
+#if (CV_MAJOR_VERSION == 4)
     pyramid.create(1, (maxLevel + 1) * pyrstep, 0 /*type*/, -1, true);
 #else
     pyramid.create(1, (maxLevel + 1) * pyrstep, 0 /*type*/, -1, true, 0);
 #endif
+
     int derivType = CV_MAKETYPE(DataType<deriv_type>::depth, img.channels() * 2);
 
-    //level 0
+    // level 0
     bool lvl0IsSet = false;
+
+    // 1 && 1 && 1
     if (tryReuseInputImage && img.isSubmatrix() && (pyrBorder & BORDER_ISOLATED) == 0)
     {
         Size wholeSize;
         Point ofs;
+
+        // wholeSize为原图像尺寸,ofs为该roi在原图像的偏移
         img.locateROI(wholeSize, ofs);
         if (ofs.x >= winSize.width && ofs.y >= winSize.height && ofs.x + img.cols + winSize.width <= wholeSize.width && ofs.y + img.rows + winSize.height <= wholeSize.height)
         {
@@ -548,7 +609,7 @@ inline int opencv_buildOpticalFlowPyramid(InputArray _img, OutputArrayOfArrays p
             temp.adjustROI(winSize.height, winSize.height, winSize.width, winSize.width);
         if (temp.type() != img.type() || temp.cols != winSize.width * 2 + img.cols || temp.rows != winSize.height * 2 + img.rows)
         {
-            // printf_line;
+
             temp.create(img.rows + winSize.height * 2, img.cols + winSize.width * 2, img.type());
         }
         if (pyrBorder == BORDER_TRANSPARENT)
@@ -604,10 +665,10 @@ inline int opencv_buildOpticalFlowPyramid(InputArray _img, OutputArrayOfArrays p
         sz = Size((sz.width + 1) / 2, (sz.height + 1) / 2);
         if (sz.width <= winSize.width || sz.height <= winSize.height)
         {
-#if (CV_MAJOR_VERSION==4)
-            pyramid.create(1, (level + 1) * pyrstep, 0 /*type*/, -1, true); //check this
-#else 
-            pyramid.create(1, (level + 1) * pyrstep, 0 /*type*/, -1, true, 0); //check this
+#if (CV_MAJOR_VERSION == 4)
+            pyramid.create(1, (level + 1) * pyrstep, 0 /*type*/, -1, true); // check this
+#else
+            pyramid.create(1, (level + 1) * pyrstep, 0 /*type*/, -1, true, 0); // check this
 #endif
             return level;
         }
@@ -638,6 +699,15 @@ void LK_optical_flow_kernel::allocate_img_deriv_memory(std::vector<Mat> &img_pyr
     }
 }
 
+
+/**
+ * @brief 通过传入的图像金字塔容器计算各层的图像梯度信息
+ * 
+ * @param img_pyr 图像金字塔容器
+ * @param img_pyr_deriv_I ? 求导结果 
+ * @param img_pyr_deriv_I_buff ? 保存每层图像求导后的金字塔容器
+ */
+// TODO
 void LK_optical_flow_kernel::calc_image_deriv_Sharr(std::vector<cv::Mat> &img_pyr,
                                                     std::vector<cv::Mat> &img_pyr_deriv_I,
                                                     std::vector<cv::Mat> &img_pyr_deriv_I_buff)
@@ -648,13 +718,17 @@ void LK_optical_flow_kernel::calc_image_deriv_Sharr(std::vector<cv::Mat> &img_py
     {
         allocate_img_deriv_memory(img_pyr, img_pyr_deriv_I, img_pyr_deriv_I_buff);
     }
+
+
     // Calculate Image derivative
     for (int level = m_maxLevel; level >= 0; level--)
     {
         cv::Size imgSize = img_pyr[level].size();
+         // 根据图像size和边界size构建一个扩充size后的图像
         cv::Mat _derivI(imgSize.height + m_lk_win_size.height * 2,
                         imgSize.width + m_lk_win_size.width * 2, img_pyr_deriv_I_buff[level].type(), img_pyr_deriv_I_buff[level].ptr());
         img_pyr_deriv_I[level] = _derivI(cv::Rect(m_lk_win_size.width, m_lk_win_size.height, imgSize.width, imgSize.height));
+
         calc_sharr_deriv(img_pyr[level], img_pyr_deriv_I[level]);
         cv::copyMakeBorder(img_pyr_deriv_I[level], _derivI, m_lk_win_size.height, m_lk_win_size.height, m_lk_win_size.width, m_lk_win_size.width, cv::BORDER_CONSTANT | cv::BORDER_ISOLATED);
     }
@@ -765,16 +839,39 @@ int test_fun(int i, int j)
     return i * i;
 }
 
+/**
+ * @brief 外层光流跟踪处理函数
+ *
+ * @param curr_img 当前帧灰度图
+ * @param last_tracked_pts 参考帧中用于跟踪的二维像素点
+ * @param curr_tracked_pts 当前帧中用于存放跟踪结果的像素点容器
+ * @param status 用于存放每个点的跟踪成功与否
+ * @param opm_method : 默认=3 :  opm_method: [0] openCV parallel_body [1] openCV parallel for [2] Thread pool
+ * @return  返回跟踪成功的点数
+ */
 int LK_optical_flow_kernel::track_image(const cv::Mat &curr_img, const std::vector<cv::Point2f> &last_tracked_pts,
                                         std::vector<cv::Point2f> &curr_tracked_pts,
                                         std::vector<uchar> &status, int opm_method)
 {
+
     // Common_tools::Timer tim;
     // tim.tic();
     // printf_line;
+
+    /**
+     * @brief Step 1 调用opencv函数构建光流跟踪金字塔 : (当前帧灰度图, 当前帧金字塔容器,窗口大小为21*21 ,最大金字塔层级为3)
+     */
     m_maxLevel = opencv_buildOpticalFlowPyramid(curr_img, m_curr_img_pyr, m_lk_win_size, m_maxLevel, false);
+
+    /**
+     * @brief Step 2 对图像金字塔求图像梯度
+     */
     calc_image_deriv_Sharr(m_curr_img_pyr, m_curr_img_deriv_I, m_curr_img_deriv_I_buff);
-    if (m_prev_img_pyr.size() == 0 || (m_prev_img_pyr[0].cols == 0)) // The first img
+
+    /**
+     * @brief Step 3 第一帧，设置为当前图像金字塔为prev
+     */
+    if (m_prev_img_pyr.size() == 0 || (m_prev_img_pyr[0].cols == 0))
     {
         m_prev_img_pyr.resize(m_curr_img_pyr.size());
         allocate_img_deriv_memory(m_curr_img_pyr, m_prev_img_deriv_I, m_prev_img_deriv_I_buff);
@@ -782,6 +879,10 @@ int LK_optical_flow_kernel::track_image(const cv::Mat &curr_img, const std::vect
         curr_tracked_pts = last_tracked_pts;
         return 0;
     }
+
+    /**
+     * @brief Step 4 假设上一帧的地图，这帧都能被追踪到
+     */
     curr_tracked_pts = last_tracked_pts;
     status.resize(last_tracked_pts.size());
     for (int i = 0; i < last_tracked_pts.size(); i++)
@@ -789,8 +890,13 @@ int LK_optical_flow_kernel::track_image(const cv::Mat &curr_img, const std::vect
         status[i] = 1;
     }
 
+
+    /**
+     * @brief Step 5 对于每一个特征点,在金字塔内由粗到精进行跟踪，每个像素的计算是独立的,调用opencv进行并行计算
+     */
     cv::parallel_for_(
-        Range(0, last_tracked_pts.size()), [&](const Range &range) {
+        Range(0, last_tracked_pts.size()), [&](const Range &range)
+        {
           //   cout << "Range " << range.start << ", " << range.end << endl;
           for (int level = m_maxLevel; level >= 0; level--) {
             calculate_LK_optical_flow(
@@ -799,11 +905,11 @@ int LK_optical_flow_kernel::track_image(const cv::Mat &curr_img, const std::vect
                 curr_tracked_pts.data(), status.data(), 0, m_lk_win_size,
                 m_terminate_criteria, level, m_maxLevel, flags,
                 minEigThreshold);
-          }
-        });
+          } });
 
     swap_image_buffer();
 
+    // 返回跟踪成功的点数
     return std::accumulate(status.begin(), status.end(), 0);
 }
 

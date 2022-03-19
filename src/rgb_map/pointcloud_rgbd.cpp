@@ -1,21 +1,21 @@
-/* 
-This code is the implementation of our paper "R3LIVE: A Robust, Real-time, RGB-colored, 
+/*
+This code is the implementation of our paper "R3LIVE: A Robust, Real-time, RGB-colored,
 LiDAR-Inertial-Visual tightly-coupled state Estimation and mapping package".
 
 Author: Jiarong Lin   < ziv.lin.ljr@gmail.com >
 
 If you use any code of this repo in your academic research, please cite at least
 one of our papers:
-[1] Lin, Jiarong, and Fu Zhang. "R3LIVE: A Robust, Real-time, RGB-colored, 
-    LiDAR-Inertial-Visual tightly-coupled state Estimation and mapping package." 
+[1] Lin, Jiarong, and Fu Zhang. "R3LIVE: A Robust, Real-time, RGB-colored,
+    LiDAR-Inertial-Visual tightly-coupled state Estimation and mapping package."
 [2] Xu, Wei, et al. "Fast-lio2: Fast direct lidar-inertial odometry."
 [3] Lin, Jiarong, et al. "R2LIVE: A Robust, Real-time, LiDAR-Inertial-Visual
-     tightly-coupled state Estimator and mapping." 
-[4] Xu, Wei, and Fu Zhang. "Fast-lio: A fast, robust lidar-inertial odometry 
+     tightly-coupled state Estimator and mapping."
+[4] Xu, Wei, and Fu Zhang. "Fast-lio: A fast, robust lidar-inertial odometry
     package by tightly-coupled iterated kalman filter."
-[5] Cai, Yixi, Wei Xu, and Fu Zhang. "ikd-Tree: An Incremental KD Tree for 
+[5] Cai, Yixi, Wei Xu, and Fu Zhang. "ikd-Tree: An Incremental KD Tree for
     Robotic Applications."
-[6] Lin, Jiarong, and Fu Zhang. "Loam-livox: A fast, robust, high-precision 
+[6] Lin, Jiarong, and Fu Zhang. "Loam-livox: A fast, robust, high-precision
     LiDAR odometry and mapping package for LiDARs of small FoV."
 
 For commercial use, please contact me < ziv.lin.ljr@gmail.com > and
@@ -114,7 +114,7 @@ int RGB_pts::update_rgb(const vec_3 &rgb, const double obs_dis, const vec_3 obs_
         return 0;
     }
 
-    if( m_N_rgb == 0)
+    if (m_N_rgb == 0)
     {
         // For first time of observation.
         m_last_obs_time = obs_time;
@@ -122,18 +122,18 @@ int RGB_pts::update_rgb(const vec_3 &rgb, const double obs_dis, const vec_3 obs_
         for (int i = 0; i < 3; i++)
         {
             m_rgb[i] = rgb[i];
-            m_cov_rgb[i] = obs_sigma(i) ;
+            m_cov_rgb[i] = obs_sigma(i);
         }
         m_N_rgb = 1;
         return 0;
     }
     // State estimation for robotics, section 2.2.6, page 37-38
-    for(int i = 0 ; i < 3; i++)
+    for (int i = 0; i < 3; i++)
     {
         m_cov_rgb[i] = (m_cov_rgb[i] + process_noise_sigma * (obs_time - m_last_obs_time)); // Add process noise
         double old_sigma = m_cov_rgb[i];
-        m_cov_rgb[i] = sqrt( 1.0 / (1.0 / m_cov_rgb[i] / m_cov_rgb[i] + 1.0 / obs_sigma(i) / obs_sigma(i)) );
-        m_rgb[i] = m_cov_rgb[i] * m_cov_rgb[i] * ( m_rgb[i] / old_sigma / old_sigma + rgb(i) / obs_sigma(i) / obs_sigma(i) );
+        m_cov_rgb[i] = sqrt(1.0 / (1.0 / m_cov_rgb[i] / m_cov_rgb[i] + 1.0 / obs_sigma(i) / obs_sigma(i)));
+        m_rgb[i] = m_cov_rgb[i] * m_cov_rgb[i] * (m_rgb[i] / old_sigma / old_sigma + rgb(i) / obs_sigma(i) / obs_sigma(i));
     }
 
     if (obs_dis < m_obs_dis)
@@ -156,34 +156,34 @@ void Global_map::set_minmum_dis(double minimum_dis)
     m_minimum_pts_size = minimum_dis;
 }
 
-Global_map::Global_map( int if_start_service )
+Global_map::Global_map(int if_start_service)
 {
-    m_mutex_pts_vec = std::make_shared< std::mutex >();
-    m_mutex_img_pose_for_projection = std::make_shared< std::mutex >();
-    m_mutex_recent_added_list = std::make_shared< std::mutex >();
-    m_mutex_rgb_pts_in_recent_hitted_boxes = std::make_shared< std::mutex >();
-    m_mutex_m_box_recent_hitted = std::make_shared< std::mutex >();
-    m_mutex_pts_last_visited = std::make_shared< std::mutex >();
+    m_mutex_pts_vec = std::make_shared<std::mutex>();
+    m_mutex_img_pose_for_projection = std::make_shared<std::mutex>();
+    m_mutex_recent_added_list = std::make_shared<std::mutex>();
+    m_mutex_rgb_pts_in_recent_hitted_boxes = std::make_shared<std::mutex>();
+    m_mutex_m_box_recent_hitted = std::make_shared<std::mutex>();
+    m_mutex_pts_last_visited = std::make_shared<std::mutex>();
     // Allocate memory for pointclouds
-    if ( Common_tools::get_total_phy_RAM_size_in_GB() < 12 )
+    if (Common_tools::get_total_phy_RAM_size_in_GB() < 12)
     {
-        scope_color( ANSI_COLOR_RED_BOLD );
-        std::this_thread::sleep_for( std::chrono::seconds( 1 ) );
+        scope_color(ANSI_COLOR_RED_BOLD);
+        std::this_thread::sleep_for(std::chrono::seconds(1));
         cout << "+++++++++++++++++++++++++++++++++++++++++++++++++++" << endl;
         cout << "I have detected your physical memory smaller than 12GB (currently: " << Common_tools::get_total_phy_RAM_size_in_GB()
              << "GB). I recommend you to add more physical memory for improving the overall performance of R3LIVE." << endl;
         cout << "+++++++++++++++++++++++++++++++++++++++++++++++++++" << endl;
-        std::this_thread::sleep_for( std::chrono::seconds( 5 ) );
-        m_rgb_pts_vec.reserve( 1e8 );
+        std::this_thread::sleep_for(std::chrono::seconds(5));
+        m_rgb_pts_vec.reserve(1e8);
     }
     else
     {
-        m_rgb_pts_vec.reserve( 1e9 );
+        m_rgb_pts_vec.reserve(1e9);
     }
     // m_rgb_pts_in_recent_visited_voxels.reserve( 1e6 );
-    if ( if_start_service )
+    if (if_start_service)
     {
-        m_thread_service = std::make_shared< std::thread >( &Global_map::service_refresh_pts_for_projection, this );
+        m_thread_service = std::make_shared<std::thread>(&Global_map::service_refresh_pts_for_projection, this);
     }
 }
 Global_map::~Global_map(){};
@@ -191,13 +191,13 @@ Global_map::~Global_map(){};
 void Global_map::service_refresh_pts_for_projection()
 {
     eigen_q last_pose_q = eigen_q::Identity();
-    Common_tools::Timer                timer;
-    std::shared_ptr< Image_frame > img_for_projection = std::make_shared< Image_frame >();
+    Common_tools::Timer timer;
+    std::shared_ptr<Image_frame> img_for_projection = std::make_shared<Image_frame>();
     while (1)
     {
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
         m_mutex_img_pose_for_projection->lock();
-         
+
         *img_for_projection = m_img_for_projection;
         m_mutex_img_pose_for_projection->unlock();
         if (img_for_projection->m_img_cols == 0 || img_for_projection->m_img_rows == 0)
@@ -213,9 +213,9 @@ void Global_map::service_refresh_pts_for_projection()
         std::shared_ptr<std::vector<std::shared_ptr<RGB_pts>>> pts_rgb_vec_for_projection = std::make_shared<std::vector<std::shared_ptr<RGB_pts>>>();
         if (m_if_get_all_pts_in_boxes_using_mp)
         {
-            std::vector<std::shared_ptr<RGB_pts>>  pts_in_recent_hitted_boxes;
+            std::vector<std::shared_ptr<RGB_pts>> pts_in_recent_hitted_boxes;
             pts_in_recent_hitted_boxes.reserve(1e6);
-            std::unordered_set< std::shared_ptr< RGB_Voxel> > boxes_recent_hitted;
+            std::unordered_set<std::shared_ptr<RGB_Voxel>> boxes_recent_hitted;
             m_mutex_m_box_recent_hitted->lock();
             boxes_recent_hitted = m_voxels_recent_visited;
             m_mutex_m_box_recent_hitted->unlock();
@@ -270,11 +270,11 @@ bool Global_map::is_busy()
     return m_in_appending_pts;
 }
 
-template int Global_map::append_points_to_global_map<pcl::PointXYZI>(pcl::PointCloud<pcl::PointXYZI> &pc_in, double  added_time, std::vector<std::shared_ptr<RGB_pts>> *pts_added_vec, int step);
-template int Global_map::append_points_to_global_map<pcl::PointXYZRGB>(pcl::PointCloud<pcl::PointXYZRGB> &pc_in, double  added_time, std::vector<std::shared_ptr<RGB_pts>> *pts_added_vec, int step);
+template int Global_map::append_points_to_global_map<pcl::PointXYZI>(pcl::PointCloud<pcl::PointXYZI> &pc_in, double added_time, std::vector<std::shared_ptr<RGB_pts>> *pts_added_vec, int step);
+template int Global_map::append_points_to_global_map<pcl::PointXYZRGB>(pcl::PointCloud<pcl::PointXYZRGB> &pc_in, double added_time, std::vector<std::shared_ptr<RGB_pts>> *pts_added_vec, int step);
 
 template <typename T>
-int Global_map::append_points_to_global_map(pcl::PointCloud<T> &pc_in, double  added_time,  std::vector<std::shared_ptr<RGB_pts>> *pts_added_vec, int step)
+int Global_map::append_points_to_global_map(pcl::PointCloud<T> &pc_in, double added_time, std::vector<std::shared_ptr<RGB_pts>> *pts_added_vec, int step)
 {
     m_in_appending_pts = 1;
     Common_tools::Timer tim;
@@ -285,7 +285,7 @@ int Global_map::append_points_to_global_map(pcl::PointCloud<T> &pc_in, double  a
     {
         pts_added_vec->clear();
     }
-    std::unordered_set< std::shared_ptr< RGB_Voxel > > voxels_recent_visited;
+    std::unordered_set<std::shared_ptr<RGB_Voxel>> voxels_recent_visited;
     if (m_recent_visited_voxel_activated_time == 0)
     {
         voxels_recent_visited.clear();
@@ -295,11 +295,11 @@ int Global_map::append_points_to_global_map(pcl::PointCloud<T> &pc_in, double  a
         m_mutex_m_box_recent_hitted->lock();
         voxels_recent_visited = m_voxels_recent_visited;
         m_mutex_m_box_recent_hitted->unlock();
-        for( Voxel_set_iterator it = voxels_recent_visited.begin(); it != voxels_recent_visited.end();  )
+        for (Voxel_set_iterator it = voxels_recent_visited.begin(); it != voxels_recent_visited.end();)
         {
-            if ( added_time - ( *it )->m_last_visited_time > m_recent_visited_voxel_activated_time )
+            if (added_time - (*it)->m_last_visited_time > m_recent_visited_voxel_activated_time)
             {
-                it = voxels_recent_visited.erase( it );
+                it = voxels_recent_visited.erase(it);
                 continue;
             }
             it++;
@@ -315,9 +315,9 @@ int Global_map::append_points_to_global_map(pcl::PointCloud<T> &pc_in, double  a
         int grid_x = std::round(pc_in.points[pt_idx].x / m_minimum_pts_size);
         int grid_y = std::round(pc_in.points[pt_idx].y / m_minimum_pts_size);
         int grid_z = std::round(pc_in.points[pt_idx].z / m_minimum_pts_size);
-        int box_x =  std::round(pc_in.points[pt_idx].x / m_voxel_resolution);
-        int box_y =  std::round(pc_in.points[pt_idx].y / m_voxel_resolution);
-        int box_z =  std::round(pc_in.points[pt_idx].z / m_voxel_resolution);
+        int box_x = std::round(pc_in.points[pt_idx].x / m_voxel_resolution);
+        int box_y = std::round(pc_in.points[pt_idx].y / m_voxel_resolution);
+        int box_z = std::round(pc_in.points[pt_idx].z / m_voxel_resolution);
         if (m_hashmap_3d_pts.if_exist(grid_x, grid_y, grid_z))
         {
             add = 0;
@@ -327,17 +327,17 @@ int Global_map::append_points_to_global_map(pcl::PointCloud<T> &pc_in, double  a
             }
         }
         RGB_voxel_ptr box_ptr;
-        if(!m_hashmap_voxels.if_exist(box_x, box_y, box_z))
+        if (!m_hashmap_voxels.if_exist(box_x, box_y, box_z))
         {
             std::shared_ptr<RGB_Voxel> box_rgb = std::make_shared<RGB_Voxel>();
-            m_hashmap_voxels.insert( box_x, box_y, box_z, box_rgb );
+            m_hashmap_voxels.insert(box_x, box_y, box_z, box_rgb);
             box_ptr = box_rgb;
         }
         else
         {
             box_ptr = m_hashmap_voxels.m_map_3d_hash_map[box_x][box_y][box_z];
         }
-        voxels_recent_visited.insert( box_ptr );
+        voxels_recent_visited.insert(box_ptr);
         box_ptr->m_last_visited_time = added_time;
         if (add == 0)
         {
@@ -358,11 +358,10 @@ int Global_map::append_points_to_global_map(pcl::PointCloud<T> &pc_in, double  a
     }
     m_in_appending_pts = 0;
     m_mutex_m_box_recent_hitted->lock();
-    m_voxels_recent_visited = voxels_recent_visited ;
+    m_voxels_recent_visited = voxels_recent_visited;
     m_mutex_m_box_recent_hitted->unlock();
-    return (m_voxels_recent_visited.size() -  number_of_voxels_before_add);
+    return (m_voxels_recent_visited.size() - number_of_voxels_before_add);
 }
-
 
 void Global_map::render_pts_in_voxels(std::shared_ptr<Image_frame> &img_ptr, std::vector<std::shared_ptr<RGB_pts>> &pts_for_render, double obs_time)
 {
@@ -398,9 +397,9 @@ void Global_map::render_pts_in_voxels(std::shared_ptr<Image_frame> &img_ptr, std
 
 Common_tools::Cost_time_logger cost_time_logger_render("/home/ziv/temp/render_thr.log");
 
-std::atomic<long> render_pts_count ;
-static inline double thread_render_pts_in_voxel(const int & pt_start, const int & pt_end, const std::shared_ptr<Image_frame> & img_ptr,
-                                                const std::vector<RGB_voxel_ptr> * voxels_for_render, const double obs_time)
+std::atomic<long> render_pts_count;
+static inline double thread_render_pts_in_voxel(const int &pt_start, const int &pt_end, const std::shared_ptr<Image_frame> &img_ptr,
+                                                const std::vector<RGB_voxel_ptr> *voxels_for_render, const double obs_time)
 {
     vec_3 pt_w;
     vec_3 rgb_color;
@@ -411,20 +410,20 @@ static inline double thread_render_pts_in_voxel(const int & pt_start, const int 
     for (int voxel_idx = pt_start; voxel_idx < pt_end; voxel_idx++)
     {
         // continue;
-        RGB_voxel_ptr voxel_ptr = (*voxels_for_render)[ voxel_idx ];
-        for ( int pt_idx = 0; pt_idx < voxel_ptr->m_pts_in_grid.size(); pt_idx++ )
+        RGB_voxel_ptr voxel_ptr = (*voxels_for_render)[voxel_idx];
+        for (int pt_idx = 0; pt_idx < voxel_ptr->m_pts_in_grid.size(); pt_idx++)
         {
             pt_w = voxel_ptr->m_pts_in_grid[pt_idx]->get_pos();
-            if ( img_ptr->project_3d_point_in_this_img( pt_w, u, v, nullptr, 1.0 ) == false )
+            if (img_ptr->project_3d_point_in_this_img(pt_w, u, v, nullptr, 1.0) == false)
             {
                 continue;
             }
-            pt_cam_norm = ( pt_w - img_ptr->m_pose_w2c_t ).norm();
+            pt_cam_norm = (pt_w - img_ptr->m_pose_w2c_t).norm();
             // double gray = img_ptr->get_grey_color(u, v, 0);
             // pts_for_render[i]->update_gray(gray, pt_cam_norm);
-            rgb_color = img_ptr->get_rgb( u, v, 0 );
-            if (  voxel_ptr->m_pts_in_grid[pt_idx]->update_rgb(
-                     rgb_color, pt_cam_norm, vec_3( image_obs_cov, image_obs_cov, image_obs_cov ), obs_time ) )
+            rgb_color = img_ptr->get_rgb(u, v, 0);
+            if (voxel_ptr->m_pts_in_grid[pt_idx]->update_rgb(
+                    rgb_color, pt_cam_norm, vec_3(image_obs_cov, image_obs_cov, image_obs_cov), obs_time))
             {
                 render_pts_count++;
             }
@@ -434,12 +433,12 @@ static inline double thread_render_pts_in_voxel(const int & pt_start, const int 
     return cost_time;
 }
 
-std::vector<RGB_voxel_ptr>  g_voxel_for_render;
-void render_pts_in_voxels_mp(std::shared_ptr<Image_frame> &img_ptr, std::unordered_set<RGB_voxel_ptr> * _voxels_for_render,  const double & obs_time)
+std::vector<RGB_voxel_ptr> g_voxel_for_render;
+void render_pts_in_voxels_mp(std::shared_ptr<Image_frame> &img_ptr, std::unordered_set<RGB_voxel_ptr> *_voxels_for_render, const double &obs_time)
 {
     Common_tools::Timer tim;
     g_voxel_for_render.clear();
-    for(Voxel_set_iterator it = (*_voxels_for_render).begin(); it != (*_voxels_for_render).end(); it++)
+    for (Voxel_set_iterator it = (*_voxels_for_render).begin(); it != (*_voxels_for_render).end(); it++)
     {
         g_voxel_for_render.push_back(*it);
     }
@@ -447,15 +446,15 @@ void render_pts_in_voxels_mp(std::shared_ptr<Image_frame> &img_ptr, std::unorder
     tim.tic("Render_mp");
     int numbers_of_voxels = g_voxel_for_render.size();
     g_cost_time_logger.record("Pts_num", numbers_of_voxels);
-    render_pts_count= 0 ;
-    if(USING_OPENCV_TBB)
+    render_pts_count = 0;
+    if (USING_OPENCV_TBB)
     {
         cv::parallel_for_(cv::Range(0, numbers_of_voxels), [&](const cv::Range &r)
                           { thread_render_pts_in_voxel(r.start, r.end, img_ptr, &g_voxel_for_render, obs_time); });
     }
     else
     {
-        int num_of_threads = std::min(8*2, (int)numbers_of_voxels);
+        int num_of_threads = std::min(8 * 2, (int)numbers_of_voxels);
         // results.clear();
         results.resize(num_of_threads);
         tim.tic("Com");
@@ -464,14 +463,14 @@ void render_pts_in_voxels_mp(std::shared_ptr<Image_frame> &img_ptr, std::unorder
             // cv::Range range(thr * pt_size / num_of_threads, (thr + 1) * pt_size / num_of_threads);
             int start = thr * numbers_of_voxels / num_of_threads;
             int end = (thr + 1) * numbers_of_voxels / num_of_threads;
-            results[thr] = m_thread_pool_ptr->commit_task(thread_render_pts_in_voxel, start, end,  img_ptr, &g_voxel_for_render, obs_time);
+            results[thr] = m_thread_pool_ptr->commit_task(thread_render_pts_in_voxel, start, end, img_ptr, &g_voxel_for_render, obs_time);
         }
         g_cost_time_logger.record(tim, "Com");
         tim.tic("wait_Opm");
         for (int thr = 0; thr < num_of_threads; thr++)
         {
             double cost_time = results[thr].get();
-            cost_time_logger_render.record(std::string("T_").append(std::to_string(thr)), cost_time );
+            cost_time_logger_render.record(std::string("T_").append(std::to_string(thr)), cost_time);
         }
         g_cost_time_logger.record(tim, "wait_Opm");
         cost_time_logger_render.record(tim, "wait_Opm");
@@ -480,7 +479,6 @@ void render_pts_in_voxels_mp(std::shared_ptr<Image_frame> &img_ptr, std::unorder
     cost_time_logger_render.flush_d();
     g_cost_time_logger.record(tim, "Render_mp");
     g_cost_time_logger.record("Pts_num_r", render_pts_count);
-    
 }
 
 void Global_map::render_with_a_image(std::shared_ptr<Image_frame> &img_ptr, int if_select)
@@ -499,47 +497,92 @@ void Global_map::render_with_a_image(std::shared_ptr<Image_frame> &img_ptr, int 
     render_pts_in_voxels(img_ptr, pts_for_render);
 }
 
-void Global_map::selection_points_for_projection(std::shared_ptr<Image_frame> &image_pose, std::vector<std::shared_ptr<RGB_pts>> *pc_out_vec,
-                                                            std::vector<cv::Point2f> *pc_2d_out_vec, double minimum_dis,
-                                                            int skip_step,
-                                                            int use_all_pts)
+/**
+ * @brief 获取当前图像帧可以用于LK光流跟踪的像素点,和其对应的空间点
+ *      (1) 获取可以用来投影到图像上的空间点,获取最近被访问过的空间点,
+ *          即最新增加至全局地图中的空间点,这些点大概率是图像和Lidar同时
+ *          看到的点,因此可以用于投影至图像上得到像素点.
+ *      (2) 将空间点投影到图像上,获取图像二维点,这些点在后面用来进行光流跟踪
+ * 
+ * @param image_pose 当前图像帧
+ * @param pc_out_vec 输出的3d空间点
+ * @param pc_2d_out_vec 输出的2d图像点
+ * @param minimum_dis 最小距离(=m_track_windows_size=50)
+ * @param skip_step =1
+ * @param use_all_pts =0
+ */
+void Global_map::selection_points_for_projection(std::shared_ptr<Image_frame> &image_pose,                           
+                                                 std::vector<std::shared_ptr<RGB_pts>> *pc_out_vec,
+                                                 std::vector<cv::Point2f> *pc_2d_out_vec, double minimum_dis,
+                                                 int skip_step,
+                                                 int use_all_pts)
 {
     Common_tools::Timer tim;
     tim.tic();
+
+    // 清空一下 输出点云
     if (pc_out_vec != nullptr)
     {
         pc_out_vec->clear();
     }
+
+    // 清空一下点云在图像上的投影
     if (pc_2d_out_vec != nullptr)
     {
         pc_2d_out_vec->clear();
     }
+
+    // 定义两个哈希表，一个存索引 一个存深度
     Hash_map_2d<int, int> mask_index;
     Hash_map_2d<int, float> mask_depth;
 
     std::map<int, cv::Point2f> map_idx_draw_center;
     std::map<int, cv::Point2f> map_idx_draw_center_raw_pose;
 
-    int u, v;
+
+    // 地图点投影得到的像素坐标，double
     double u_f, v_f;
+
+    // double像素坐标取整
+    int u, v;
+
     // cv::namedWindow("Mask", cv::WINDOW_FREERATIO);
     int acc = 0;
+
     int blk_rej = 0;
+
     // int pts_size = m_rgb_pts_vec.size();
+
+    // 存放用于投影的空间点
     std::vector<std::shared_ptr<RGB_pts>> pts_for_projection;
+
     m_mutex_m_box_recent_hitted->lock();
-    std::unordered_set< std::shared_ptr< RGB_Voxel > > boxes_recent_hitted = m_voxels_recent_visited;
+
+    // 获取最近被访问过的体素,即最新增加至全局地图中的体素。
+    // 这些点大概率是图像和Lidar同时看到的点,因此可以用于投影至图像上得到像素点
+    std::unordered_set<std::shared_ptr<RGB_Voxel>> boxes_recent_hitted = m_voxels_recent_visited;
+
     m_mutex_m_box_recent_hitted->unlock();
-    if ( (!use_all_pts) && boxes_recent_hitted.size())
+
+
+    /**
+     * @brief 把最近访问过得的体素栅格内的地图点提取出来，准备投影
+     * 
+     */
+    if ((!use_all_pts) && boxes_recent_hitted.size())
     {
         m_mutex_rgb_pts_in_recent_hitted_boxes->lock();
-        
-        for(Voxel_set_iterator it = boxes_recent_hitted.begin(); it != boxes_recent_hitted.end(); it++)
+
+        // 对体素单元进行遍历
+        for (Voxel_set_iterator it = boxes_recent_hitted.begin(); it != boxes_recent_hitted.end(); it++)
         {
             // pts_for_projection.push_back( (*it)->m_pts_in_grid.back() );
-            if ( ( *it )->m_pts_in_grid.size() )
+
+            // 如果体素内有地图点，则添加一个地图点进去
+            // 如果体素内有多个地图点也只加入一个
+            if ((*it)->m_pts_in_grid.size())
             {
-                 pts_for_projection.push_back( (*it)->m_pts_in_grid.back() );
+                pts_for_projection.push_back((*it)->m_pts_in_grid.back());
                 // pts_for_projection.push_back( ( *it )->m_pts_in_grid[ 0 ] );
                 // pts_for_projection.push_back( ( *it )->m_pts_in_grid[ ( *it )->m_pts_in_grid.size()-1 ] );
             }
@@ -551,10 +594,21 @@ void Global_map::selection_points_for_projection(std::shared_ptr<Image_frame> &i
     {
         pts_for_projection = m_rgb_pts_vec;
     }
+
+
+    /**
+     * @brief 将空间点投影到图像上,获取图像二维点,这些点在后面用来进行光流跟踪
+     * 
+     */
     int pts_size = pts_for_projection.size();
+
+    // skip_step = 1 一个都不跳过
     for (int pt_idx = 0; pt_idx < pts_size; pt_idx += skip_step)
     {
+        // 地图点的3D坐标取出来
         vec_3 pt = pts_for_projection[pt_idx]->get_pos();
+
+        // 地图点到相机的距离需要满足最大与最小观测阈值
         double depth = (pt - image_pose->m_pose_w2c_t).norm();
         if (depth > m_maximum_depth_for_projection)
         {
@@ -564,16 +618,28 @@ void Global_map::selection_points_for_projection(std::shared_ptr<Image_frame> &i
         {
             continue;
         }
+
+        // 地图点根据当前帧的位姿投影到图像像素坐标系下，并进行深度值检验，离相机太近0.001m或者深度值为负的则错误。
         bool res = image_pose->project_3d_point_in_this_img(pt, u_f, v_f, nullptr, 1.0);
         if (res == false)
         {
             continue;
         }
+
+        // 像素坐标取整
+        // 最小的像素值为50，防止取到边缘处的点
         u = std::round(u_f / minimum_dis) * minimum_dis; // Why can not work
         v = std::round(v_f / minimum_dis) * minimum_dis;
+
+
+        // 条件1 这个像素点还没被注册 
+        // 或
+        // 条件2 本次投影的该像素的深度值小于历史存储的 (猜测是因为远点的测量误差更大,所以舍去)
         if ((!mask_depth.if_exist(u, v)) || mask_depth.m_map_2d_hash_map[u][v] > depth)
         {
             acc++;
+
+            // 如果是条件2进来的,进行一个删除
             if (mask_index.if_exist(u, v))
             {
                 // erase old point
@@ -582,6 +648,8 @@ void Global_map::selection_points_for_projection(std::shared_ptr<Image_frame> &i
                 map_idx_draw_center.erase(map_idx_draw_center.find(old_idx));
                 map_idx_draw_center_raw_pose.erase(map_idx_draw_center_raw_pose.find(old_idx));
             }
+
+            //存储新的索引与对应的深度值 
             mask_index.m_map_2d_hash_map[u][v] = (int)pt_idx;
             mask_depth.m_map_2d_hash_map[u][v] = (float)depth;
             map_idx_draw_center[pt_idx] = cv::Point2f(v, u);
@@ -589,8 +657,10 @@ void Global_map::selection_points_for_projection(std::shared_ptr<Image_frame> &i
         }
     }
 
+    // 防止指针为空
     if (pc_out_vec != nullptr)
     {
+        // 把符合条件的点丢进去
         for (auto it = map_idx_draw_center.begin(); it != map_idx_draw_center.end(); it++)
         {
             // pc_out_vec->push_back(m_rgb_pts_vec[it->first]);
@@ -598,17 +668,18 @@ void Global_map::selection_points_for_projection(std::shared_ptr<Image_frame> &i
         }
     }
 
+    // 防止指针为空
     if (pc_2d_out_vec != nullptr)
     {
+        // 把符合条件的点丢进去
         for (auto it = map_idx_draw_center.begin(); it != map_idx_draw_center.end(); it++)
         {
             pc_2d_out_vec->push_back(map_idx_draw_center_raw_pose[it->first]);
         }
     }
-
 }
 
-void Global_map::save_to_pcd(std::string dir_name, std::string _file_name, int save_pts_with_views )
+void Global_map::save_to_pcd(std::string dir_name, std::string _file_name, int save_pts_with_views)
 {
     Common_tools::Timer tim;
     Common_tools::create_dir(dir_name);
@@ -621,11 +692,11 @@ void Global_map::save_to_pcd(std::string dir_name, std::string _file_name, int s
     pc_rgb.resize(pt_size);
     long pt_count = 0;
     for (long i = pt_size - 1; i > 0; i--)
-    //for (int i = 0; i  <  pt_size; i++)
+    // for (int i = 0; i  <  pt_size; i++)
     {
-        if ( i % 1000 == 0)
+        if (i % 1000 == 0)
         {
-            cout << ANSI_DELETE_CURRENT_LINE << "Saving offline map " << (int)( (pt_size- 1 -i ) * 100.0 / (pt_size-1) ) << " % ...";
+            cout << ANSI_DELETE_CURRENT_LINE << "Saving offline map " << (int)((pt_size - 1 - i) * 100.0 / (pt_size - 1)) << " % ...";
             fflush(stdout);
         }
 
@@ -634,19 +705,19 @@ void Global_map::save_to_pcd(std::string dir_name, std::string _file_name, int s
             continue;
         }
         pcl::PointXYZRGB pt;
-        pc_rgb.points[ pt_count ].x = m_rgb_pts_vec[ i ]->m_pos[ 0 ];
-        pc_rgb.points[ pt_count ].y = m_rgb_pts_vec[ i ]->m_pos[ 1 ];
-        pc_rgb.points[ pt_count ].z = m_rgb_pts_vec[ i ]->m_pos[ 2 ];
-        pc_rgb.points[ pt_count ].r = m_rgb_pts_vec[ i ]->m_rgb[ 2 ];
-        pc_rgb.points[ pt_count ].g = m_rgb_pts_vec[ i ]->m_rgb[ 1 ];
-        pc_rgb.points[ pt_count ].b = m_rgb_pts_vec[ i ]->m_rgb[ 0 ];
+        pc_rgb.points[pt_count].x = m_rgb_pts_vec[i]->m_pos[0];
+        pc_rgb.points[pt_count].y = m_rgb_pts_vec[i]->m_pos[1];
+        pc_rgb.points[pt_count].z = m_rgb_pts_vec[i]->m_pos[2];
+        pc_rgb.points[pt_count].r = m_rgb_pts_vec[i]->m_rgb[2];
+        pc_rgb.points[pt_count].g = m_rgb_pts_vec[i]->m_rgb[1];
+        pc_rgb.points[pt_count].b = m_rgb_pts_vec[i]->m_rgb[0];
         pt_count++;
     }
-    cout << ANSI_DELETE_CURRENT_LINE  << "Saving offline map 100% ..." << endl;
+    cout << ANSI_DELETE_CURRENT_LINE << "Saving offline map 100% ..." << endl;
     pc_rgb.resize(pt_count);
     cout << "Total have " << pt_count << " points." << endl;
     tim.tic();
-    cout << "Now write to: " << file_name << endl; 
+    cout << "Now write to: " << file_name << endl;
     pcl::io::savePCDFileBinary(std::string(file_name).append(".pcd"), pc_rgb);
     cout << "Save PCD cost time = " << tim.toc() << endl;
 }

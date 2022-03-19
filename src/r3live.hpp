@@ -244,6 +244,8 @@ public:
     std::mutex g_mutex_render;
     std::shared_ptr<Image_frame> g_last_image_pose_for_render = nullptr;
     std::list<double> frame_cost_time_vec;
+    
+    // 初始化光流跟踪器
     Rgbmap_tracker op_track;    
     Global_map m_map_rgb_pts;
     int m_maximum_image_buffer = 2;
@@ -314,7 +316,7 @@ public:
     
     R3LIVE()
     {
-        //(1)初始化涉及到的发布消息格式
+        //(1)初始化发布消息对象
         pubLaserCloudFullRes = m_ros_node_handle.advertise<sensor_msgs::PointCloud2>("/cloud_registered", 100);
         pubLaserCloudEffect = m_ros_node_handle.advertise<sensor_msgs::PointCloud2>("/cloud_effected", 100);
         pubLaserCloudMap = m_ros_node_handle.advertise<sensor_msgs::PointCloud2>("/Laser_map", 100);
@@ -324,7 +326,6 @@ public:
         m_pub_visual_tracked_3d_pts = m_ros_node_handle.advertise<sensor_msgs::PointCloud2>("/track_pts", 10);
         m_pub_render_rgb_pts = m_ros_node_handle.advertise<sensor_msgs::PointCloud2>("/render_pts", 10);
         pubPath = m_ros_node_handle.advertise<nav_msgs::Path>("/path", 10);
-
         pub_odom_cam = m_ros_node_handle.advertise<nav_msgs::Odometry>("/camera_odom", 10);
         pub_path_cam = m_ros_node_handle.advertise<nav_msgs::Path>("/camera_path", 10);
         std::string LiDAR_pointcloud_topic, IMU_topic, IMAGE_topic, IMAGE_topic_compressed;
@@ -353,14 +354,16 @@ public:
         sub_imu = m_ros_node_handle.subscribe(IMU_topic.c_str(), 2000000, &R3LIVE::imu_cbk, this, ros::TransportHints().tcpNoDelay());
         //(4-2) Lidar回调函数 : 用于向Lidar_buffer中加入接收到的雷达数据 : 注意这里的LiDAR_pointcloud_topic是经过了原始数据转换后的lidar面特征数据.
         sub_pcl = m_ros_node_handle.subscribe(LiDAR_pointcloud_topic.c_str(), 2000000, &R3LIVE::feat_points_cbk, this, ros::TransportHints().tcpNoDelay());
-        //(4-3) Image回调函数 : 
+		
+        //(4-3) Image回调函数 原始图像及压缩图像
         sub_img = m_ros_node_handle.subscribe(IMAGE_topic.c_str(), 1000000, &R3LIVE::image_callback, this, ros::TransportHints().tcpNoDelay());
         sub_img_comp = m_ros_node_handle.subscribe(IMAGE_topic_compressed.c_str(), 1000000, &R3LIVE::image_comp_callback, this, ros::TransportHints().tcpNoDelay());
 
+		// 初始的姿态
         m_ros_node_handle.getParam("/initial_pose", m_initial_pose);
         m_pub_rgb_render_pointcloud_ptr_vec.resize(1e3);
 
-        // (5) 从ROS参数服务器上获取参数信息
+        // (5) 从ROS参数服务器上获取参数信息 config文件里的一些参数
         // ANCHOR - ROS parameters
         if ( 1 )
         {
@@ -411,9 +414,12 @@ public:
         // (6)创建地图输出路径
         if(!Common_tools::if_file_exist(m_map_output_dir))
         {
+			
             cout << ANSI_COLOR_BLUE_BOLD << "Create r3live output dir: " << m_map_output_dir << ANSI_COLOR_RESET << endl;
             Common_tools::create_dir(m_map_output_dir);
         }
+		
+		
         // (7)初始化用到的变量
         m_thread_pool_ptr = std::make_shared<Common_tools::ThreadPool>(6, true, false); // 设置线程池 At least 5 threads are needs, here we allocate 6 threads.
         g_cost_time_logger.init_log( std::string(m_map_output_dir).append("/cost_time_logger.log"));

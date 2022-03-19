@@ -163,47 +163,67 @@ StatesGroup ImuProcess::imu_preintegration( const StatesGroup &state_in, std::de
 {
     std::unique_lock< std::mutex > lock( g_imu_premutex );
     StatesGroup                    state_inout = state_in;
+
+    // 输出状态变量的值
     if ( check_state( state_inout ) )
     {
         state_inout.display( state_inout, "state_inout" );
         state_in.display( state_in, "state_in" );
     }
+
+
     Eigen::Vector3d acc_imu( 0, 0, 0 ), angvel_avr( 0, 0, 0 ), acc_avr( 0, 0, 0 ), vel_imu( 0, 0, 0 ), pos_imu( 0, 0, 0 );
+
+    // 上一个时刻的速度和位置
     vel_imu = state_inout.vel_end;
     pos_imu = state_inout.pos_end;
+
+    // 
     Eigen::Matrix3d R_imu( state_inout.rot_end );
     Eigen::MatrixXd F_x( Eigen::Matrix< double, DIM_OF_STATES, DIM_OF_STATES >::Identity() );
     Eigen::MatrixXd cov_w( Eigen::Matrix< double, DIM_OF_STATES, DIM_OF_STATES >::Zero() );
+
     double          dt = 0;
     int             if_first_imu = 1;
+
     // printf("IMU start_time = %.5f, end_time = %.5f, state_update_time = %.5f, start_delta = %.5f\r\n", v_imu.front()->header.stamp.toSec() -
     // g_lidar_star_tim,
     //        v_imu.back()->header.stamp.toSec() - g_lidar_star_tim,
     //        state_in.last_update_time - g_lidar_star_tim,
     //        state_in.last_update_time - v_imu.front()->header.stamp.toSec());
+
+    // 对每个时刻的IMU数据进行计算
     for ( std::deque< sensor_msgs::Imu::ConstPtr >::iterator it_imu = v_imu.begin(); it_imu != ( v_imu.end() - 1 ); it_imu++ )
     {
         // if(g_lidar_star_tim == 0 || state_inout.last_update_time == 0)
         // {
         //   return state_inout;
         // }
+
+        // 相邻imu的信息
         sensor_msgs::Imu::ConstPtr head = *( it_imu );
         sensor_msgs::Imu::ConstPtr tail = *( it_imu + 1 );
 
+
+        // 中值积分 角速度
         angvel_avr << 0.5 * ( head->angular_velocity.x + tail->angular_velocity.x ), 0.5 * ( head->angular_velocity.y + tail->angular_velocity.y ),
             0.5 * ( head->angular_velocity.z + tail->angular_velocity.z );
+       
+        // 中值积分 加速度   
         acc_avr << 0.5 * ( head->linear_acceleration.x + tail->linear_acceleration.x ),
             0.5 * ( head->linear_acceleration.y + tail->linear_acceleration.y ), 0.5 * ( head->linear_acceleration.z + tail->linear_acceleration.z );
 
+        // 除去偏置的估计值
         angvel_avr -= state_inout.bias_g;
-
         acc_avr = acc_avr - state_inout.bias_a;
+
 
         if ( tail->header.stamp.toSec() < state_inout.last_update_time )
         {
             continue;
         }
 
+        // 第一帧
         if ( if_first_imu )
         {
             if_first_imu = 0;
@@ -213,17 +233,28 @@ StatesGroup ImuProcess::imu_preintegration( const StatesGroup &state_in, std::de
         {
             dt = tail->header.stamp.toSec() - head->header.stamp.toSec();
         }
+
+        // 200Hz的IMU数据
         if ( dt > 0.05 )
         {
             dt = 0.05;
         }
 
         /* covariance propagation */
+
+        // 协方差传播
         Eigen::Matrix3d acc_avr_skew;
+
+        // 罗德里格斯变换 
         Eigen::Matrix3d Exp_f = Exp( angvel_avr, dt );
         acc_avr_skew << SKEW_SYM_MATRIX( acc_avr );
+
         // Eigen::Matrix3d Jr_omega_dt = right_jacobian_of_rotion_matrix<double>(angvel_avr*dt);
         Eigen::Matrix3d Jr_omega_dt = Eigen::Matrix3d::Identity();
+
+
+        // IMU状态变量转移矩阵
+        // 详细推导见 补充材料S2-下
         F_x.block< 3, 3 >( 0, 0 ) = Exp_f.transpose();
         // F_x.block<3, 3>(0, 9) = -Eye3d * dt;
         F_x.block< 3, 3 >( 0, 9 ) = -Jr_omega_dt * dt;
@@ -234,30 +265,53 @@ StatesGroup ImuProcess::imu_preintegration( const StatesGroup &state_in, std::de
         F_x.block< 3, 3 >( 6, 12 ) = -R_imu * dt;
         F_x.block< 3, 3 >( 6, 15 ) = Eye3d * dt;
 
+
+        // 加速度计协方差、陀螺协方差
         Eigen::Matrix3d cov_acc_diag, cov_gyr_diag, cov_omega_diag;
+
         cov_omega_diag = Eigen::Vector3d( COV_OMEGA_NOISE_DIAG, COV_OMEGA_NOISE_DIAG, COV_OMEGA_NOISE_DIAG ).asDiagonal();
         cov_acc_diag = Eigen::Vector3d( COV_ACC_NOISE_DIAG, COV_ACC_NOISE_DIAG, COV_ACC_NOISE_DIAG ).asDiagonal();
         cov_gyr_diag = Eigen::Vector3d( COV_GYRO_NOISE_DIAG, COV_GYRO_NOISE_DIAG, COV_GYRO_NOISE_DIAG ).asDiagonal();
-        // cov_w.block<3, 3>(0, 0) = cov_omega_diag * dt * dt;
+
+        // 噪声传播 F_w * Q * F^{T}_{w}
+        // 详细推导见 补充材料S2-下 
         cov_w.block< 3, 3 >( 0, 0 ) = Jr_omega_dt * cov_omega_diag * Jr_omega_dt * dt * dt;
         cov_w.block< 3, 3 >( 3, 3 ) = R_imu * cov_gyr_diag * R_imu.transpose() * dt * dt;
         cov_w.block< 3, 3 >( 6, 6 ) = cov_acc_diag * dt * dt;
-        cov_w.block< 3, 3 >( 9, 9 ).diagonal() =
-            Eigen::Vector3d( COV_BIAS_GYRO_NOISE_DIAG, COV_BIAS_GYRO_NOISE_DIAG, COV_BIAS_GYRO_NOISE_DIAG ) * dt * dt; // bias gyro covariance
-        cov_w.block< 3, 3 >( 12, 12 ).diagonal() =
-            Eigen::Vector3d( COV_BIAS_ACC_NOISE_DIAG, COV_BIAS_ACC_NOISE_DIAG, COV_BIAS_ACC_NOISE_DIAG ) * dt * dt; // bias acc covariance
 
+
+        // bias gyro covariance
+        cov_w.block< 3, 3 >( 9, 9 ).diagonal() =
+            Eigen::Vector3d( COV_BIAS_GYRO_NOISE_DIAG, COV_BIAS_GYRO_NOISE_DIAG, COV_BIAS_GYRO_NOISE_DIAG ) * dt * dt; 
+       
+        // bias acc covariance
+        cov_w.block< 3, 3 >( 12, 12 ).diagonal() =
+
+            Eigen::Vector3d( COV_BIAS_ACC_NOISE_DIAG, COV_BIAS_ACC_NOISE_DIAG, COV_BIAS_ACC_NOISE_DIAG ) * dt * dt; 
         // cov_w.block<3, 3>(18, 18).diagonal() = Eigen::Vector3d(COV_NOISE_EXT_I2C_R, COV_NOISE_EXT_I2C_R, COV_NOISE_EXT_I2C_R) * dt * dt; // bias
         // gyro covariance cov_w.block<3, 3>(21, 21).diagonal() = Eigen::Vector3d(COV_NOISE_EXT_I2C_T, COV_NOISE_EXT_I2C_T, COV_NOISE_EXT_I2C_T) * dt
         // * dt;  // bias acc covariance cov_w(24, 24) = COV_NOISE_EXT_I2C_Td * dt * dt;
 
+
+        // 协方差更新 R2LIVE-式12
         state_inout.cov = F_x * state_inout.cov * F_x.transpose() + cov_w;
 
+
+
+        // 先验状态量更新 参考预积分的公式
+        // IMU位姿更新
         R_imu = R_imu * Exp_f;
+        // 世界系下的加速度更新
         acc_imu = R_imu * acc_avr - state_inout.gravity;
+        // 世界系下的位置更新
         pos_imu = pos_imu + vel_imu * dt + 0.5 * acc_imu * dt * dt;
+        // 世界系下的速度更新
         vel_imu = vel_imu + acc_imu * dt;
+
+
+        // 保存状态
         angvel_last = angvel_avr;
+        // 
         acc_s_last = acc_imu;
 
         // cout <<  std::setprecision(3) << " dt = " << dt << ", acc: " << acc_avr.transpose()
@@ -271,10 +325,14 @@ StatesGroup ImuProcess::imu_preintegration( const StatesGroup &state_in, std::de
 
     // cout <<__FILE__ << ", " << __LINE__ <<" ,diagnose lio_state = " << std::setprecision(2) <<(state_inout - StatesGroup()).transpose() << endl;
     /*** calculated the pos and attitude prediction at the frame-end ***/
+    
+    // 时间更新
     dt = end_pose_dt;
-
     state_inout.last_update_time = v_imu.back()->header.stamp.toSec() + dt;
+
     // cout << "Last update time = " <<  state_inout.last_update_time - g_lidar_star_tim << endl;
+    
+    // 
     if ( dt > 0.1 )
     {
         scope_color( ANSI_COLOR_RED_BOLD );
@@ -284,6 +342,8 @@ StatesGroup ImuProcess::imu_preintegration( const StatesGroup &state_in, std::de
         }
         dt = 0.1;
     }
+
+    // 使用预积分更新状态变量
     state_inout.vel_end = vel_imu + acc_imu * dt;
     state_inout.rot_end = R_imu * Exp( angvel_avr, dt );
     state_inout.pos_end = pos_imu + vel_imu * dt + 0.5 * acc_imu * dt * dt;
@@ -294,6 +354,8 @@ StatesGroup ImuProcess::imu_preintegration( const StatesGroup &state_in, std::de
     //      <<  endl;
     // std::cout << __FILE__ << " " << __LINE__ << std::endl;
     // check_state(state_inout);
+
+
     if ( 0 )
     {
         if ( check_state( state_inout ) )
@@ -305,6 +367,8 @@ StatesGroup ImuProcess::imu_preintegration( const StatesGroup &state_in, std::de
         }
         check_in_out_state( state_in, state_inout );
     }
+
+
     // cout << (state_inout - state_in).transpose() << endl;
     return state_inout;
 }

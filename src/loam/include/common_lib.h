@@ -31,6 +31,7 @@
 
 #define PI_M (3.14159265358)
 #define G_m_s2 (9.81)     // Gravity const in Hong Kong SAR, China
+
 #if ENABLE_CAMERA_OBS
 #define DIM_OF_STATES (29) // with vio obs
 #else
@@ -212,6 +213,7 @@ struct Camera_Lidar_queue
         if (m_liar_frame_buf != nullptr && m_liar_frame_buf->size())
         {
             // 获取队列中的头部lidar数据的时间
+            // 雷达的频率是10Hz
             m_last_lidar_time = m_liar_frame_buf->front()->header.stamp.toSec() + 0.1;
             return m_last_lidar_time;
         }
